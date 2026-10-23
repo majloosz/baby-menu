@@ -17,13 +17,15 @@ export function usePopoverVisible(): boolean {
 
   useEffect(() => {
     let disposed = false;
+    let visibilityEventSeen = false;
     const unsubscribe = window.babyMenu?.popover.onVisibility(({ visible }) => {
+      visibilityEventSeen = true;
       if (!disposed) setVisible(visible);
     });
     void window.babyMenu?.popover
       .getVisibility?.()
       .then((state) => {
-        if (!disposed && state) setVisible(state.visible);
+        if (!disposed && !visibilityEventSeen && state) setVisible(state.visible);
       })
       .catch(() => undefined);
     return () => {

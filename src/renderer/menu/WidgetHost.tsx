@@ -97,38 +97,45 @@ type WidgetHostProps = {
   layoutImporter?: RuntimeModuleImporter;
 };
 
-export function WidgetHost({ widgets, runtimeImporter, runtimeRefreshIntervalMs, layout, layoutImporter }: WidgetHostProps) {
-  const runtimeWidgets = useRuntimeWidgets({
-    enabled: widgets === undefined,
-    importer: runtimeImporter,
-    refreshIntervalMs: runtimeRefreshIntervalMs,
-  });
+export function WidgetHost({
+  widgets,
+  runtimeImporter = importRuntimeModule,
+  runtimeRefreshIntervalMs = DEFAULT_RUNTIME_REFRESH_INTERVAL_MS,
+  layout,
+  layoutImporter = importRuntimeModule,
+}: WidgetHostProps) {
+  // One visibility subscription shared by both discovery polls.
+  const visible = usePopoverVisible();
+
+  const runtimeWidgets = useRuntimeDiscovery<RefreshableBabyMenuWidget[]>(
+    [],
+    useCallback(() => loadRuntimeWidgets(runtimeImporter), [runtimeImporter]),
+    { enabled: widgets === undefined, visible, refreshIntervalMs: runtimeRefreshIntervalMs },
+  );
   const visibleWidgets = widgets ?? (runtimeWidgets.length > 0 ? runtimeWidgets : [helloWorldWidget]);
 
-  const runtimeLayout = useRuntimeLayout({
-    enabled: widgets === undefined && layout === undefined,
-    importer: layoutImporter,
-    refreshIntervalMs: runtimeRefreshIntervalMs,
-  });
+  // Polls for the root layout module on the same cadence as widget discovery, so
+  // editing `layout.tsx` hot-reloads the arrangement. Null when there is no
+  // layout module (the canvas then renders the built-in column).
+  const runtimeLayout = useRuntimeDiscovery<BabyMenuLayout | null>(
+    null,
+    useCallback(() => loadRuntimeLayout(layoutImporter), [layoutImporter]),
+    { enabled: widgets === undefined && layout === undefined, visible, refreshIntervalMs: runtimeRefreshIntervalMs },
+  );
   const activeLayout = layout === undefined ? runtimeLayout : layout;
 
   return <WidgetCanvas layout={activeLayout} widgets={visibleWidgets} />;
 }
 
-function useRuntimeWidgets({
-  enabled,
-  importer = importRuntimeModule,
-  refreshIntervalMs = DEFAULT_RUNTIME_REFRESH_INTERVAL_MS,
-}: {
-  enabled: boolean;
-  importer?: RuntimeWidgetImporter;
-  refreshIntervalMs?: number;
-}) {
-  const [widgets, setWidgets] = useState<RefreshableBabyMenuWidget[]>([]);
-  // Discovery polling idles while the popover is hidden (see usePopoverVisible):
-  // the effect re-runs on show, so the refresh below picks up hidden edits.
-  // The first mount always refreshes once (bridge state is still resolving).
-  const visible = usePopoverVisible();
+// Discovery polling idles while the popover is hidden (see usePopoverVisible):
+// the effect re-runs on show, so the refresh picks up hidden edits. The first
+// mount always refreshes once (bridge state is still resolving).
+function useRuntimeDiscovery<T>(
+  initial: T,
+  load: () => Promise<T>,
+  { enabled, visible, refreshIntervalMs }: { enabled: boolean; visible: boolean; refreshIntervalMs: number },
+): T {
+  const [value, setValue] = useState<T>(initial);
   const refreshedOnce = useRef(false);
 
   useEffect(() => {
@@ -136,75 +143,23 @@ function useRuntimeWidgets({
     let cancelled = false;
 
     async function refresh() {
-      const loadedWidgets = await loadRuntimeWidgets(importer);
-      if (!cancelled) setWidgets(loadedWidgets);
+      const loaded = await load();
+      // setState updater form because the stored value may itself be a function.
+      if (!cancelled) setValue(() => loaded);
     }
 
     if (visible || !refreshedOnce.current) {
       refreshedOnce.current = true;
       void refresh();
     }
-    if (!visible || !refreshIntervalMs || refreshIntervalMs <= 0) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const timer = window.setInterval(() => void refresh(), refreshIntervalMs);
+    const timer = visible && refreshIntervalMs > 0 ? window.setInterval(() => void refresh(), refreshIntervalMs) : undefined;
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [enabled, importer, refreshIntervalMs, visible]);
+  }, [enabled, load, refreshIntervalMs, visible]);
 
-  return widgets;
-}
-
-// Polls for the root layout module on the same cadence as widget discovery, so
-// editing `layout.tsx` hot-reloads the arrangement. Returns null when there is
-// no layout module (the canvas then renders the built-in column).
-function useRuntimeLayout({
-  enabled,
-  importer = importRuntimeModule,
-  refreshIntervalMs = DEFAULT_RUNTIME_REFRESH_INTERVAL_MS,
-}: {
-  enabled: boolean;
-  importer?: RuntimeModuleImporter;
-  refreshIntervalMs?: number;
-}) {
-  const [layout, setLayout] = useState<BabyMenuLayout | null>(null);
-  // Same idle-while-hidden gating as widget discovery above.
-  const visible = usePopoverVisible();
-  const refreshedOnce = useRef(false);
-
-  useEffect(() => {
-    if (!enabled) return undefined;
-    let cancelled = false;
-
-    async function refresh() {
-      const loaded = await loadRuntimeLayout(importer);
-      // setState updater form because the stored value is itself a function.
-      if (!cancelled) setLayout(() => loaded);
-    }
-
-    if (visible || !refreshedOnce.current) {
-      refreshedOnce.current = true;
-      void refresh();
-    }
-    if (!visible || !refreshIntervalMs || refreshIntervalMs <= 0) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const timer = window.setInterval(() => void refresh(), refreshIntervalMs);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [enabled, importer, refreshIntervalMs, visible]);
-
-  return layout;
+  return value;
 }
 
 export async function loadRuntimeWidgets(importer: RuntimeWidgetImporter = importRuntimeModule) {
