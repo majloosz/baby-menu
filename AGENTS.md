@@ -29,6 +29,10 @@ Detail lives in the docs: `docs/architecture.md` (runtime design, security bound
 - Keep `typescript`, `tailwindcss`, `@tailwindcss/postcss`, and `postcss` as runtime dependencies (externalized for packaged extension compilation) and keep the single pinned `postcss` override. Keep `esbuild` build-only.
 - Recipes must be self-contained, use real data only (no mock fallbacks), and never include secrets; follow `docs/recipes.md` and update `tests/recipe-loader.test.ts` when recipe conventions change.
 
+## Fork workflow (majloosz/baby-menu)
+
+- This checkout pushes only to `origin` (our fork, `majloosz/baby-menu`). Never open PRs or issues against upstream `kunchenguid/baby-menu`, and never push there. All review/merge happens on our fork.
+
 ## Packaging hygiene for automation
 
 - Local `pnpm package:mac` builds carry the `Baby Menu Dev` / `com.kunchenguid.baby-menu.dev` identity; never change that to the production identity.
