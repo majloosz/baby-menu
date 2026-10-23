@@ -92,4 +92,11 @@ describe("extension database", () => {
     expect(second.get("SELECT n FROM t")).toEqual({ n: 42 });
     second.close();
   });
+
+  it("tolerates close called twice (before-quit can fire more than once)", () => {
+    const db = memoryDb();
+    db.close();
+
+    expect(() => db.close()).not.toThrow();
+  });
 });

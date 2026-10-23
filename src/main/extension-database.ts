@@ -32,6 +32,10 @@ export function createExtensionDatabase(databasePath: string): ExtensionDatabase
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA busy_timeout = 5000");
 
+  // node:sqlite throws "database is not open" when close runs twice, and the
+  // before-quit shutdown path can fire more than once (double quit). Track it.
+  let open = true;
+
   const prepare = (sql: string): StatementSync => db.prepare(sql);
   // node:sqlite accepts either positional values or a single named-parameter object.
   // bindArgs already normalizes to that arg list; cast to each method's tuple type.
@@ -65,6 +69,8 @@ export function createExtensionDatabase(databasePath: string): ExtensionDatabase
       }
     },
     close(): void {
+      if (!open) return;
+      open = false;
       db.close();
     },
   };
