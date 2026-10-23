@@ -12,7 +12,6 @@ import {
   DEFAULT_POPOVER_SIZE,
   POPOVER_BLUR_GRACE_MS,
   POPOVER_BLUR_HIDE_DELAY_MS,
-  applyPopoverSpaceBehavior,
   calculatePopoverBounds,
   createPopoverOptions,
   createRendererReloadBudget,
@@ -60,6 +59,7 @@ let latestPopoverSize: Size = DEFAULT_POPOVER_SIZE;
 // every explicit show so the transient blur from a Spaces/display switch or
 // from the tray click itself cannot instantly hide the window again (#117).
 let suppressPopoverBlurUntil = 0;
+let appQuitting = false;
 
 export function getActiveBabyMenuTray(): BabyMenuTray | null {
   return activeTray;
@@ -74,18 +74,18 @@ async function createPopoverWindow(): Promise<BrowserWindow> {
 
   const dirname = currentDirname();
   popoverWindow = new BrowserWindow(createPopoverOptions(join(dirname, "../preload/index.cjs")));
-  // Pin to every Space so opening from another desktop never triggers a Space
-  // jump (which used to steal focus -> blur -> instant hide, issue #117).
-  applyPopoverSpaceBehavior(popoverWindow);
+  // macOS Spaces fix (issue #117): a menu-bar popover must live on every Space.
+  // Otherwise opening it from another desktop forces a Space jump, the jump
+  // steals focus, `blur` fires and the popover instantly hides again.
+  popoverWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   popoverWindow.on("blur", () => {
     if (process.env.BABY_MENU_KEEP_POPOVER_OPEN === "1") return;
     const window = popoverWindow;
-    if (!window || window.isDestroyed()) return;
-    if (shouldSuppressPopoverBlur(suppressPopoverBlurUntil)) return;
+    if (!window || shouldSuppressPopoverBlur(suppressPopoverBlurUntil)) return;
     // macOS fires blur just before the tray click handler; defer so a toggle
     // that refocuses within the delay wins and the popover stays open.
     setTimeout(() => {
-      if (!window || window.isDestroyed()) return;
+      if (window.isDestroyed()) return;
       if (shouldSuppressPopoverBlur(suppressPopoverBlurUntil)) return;
       if (window.isFocused()) return;
       if (!window.isVisible()) return;
@@ -97,7 +97,8 @@ async function createPopoverWindow(): Promise<BrowserWindow> {
   // and was the only reason Cmd+W "worked" across Spaces while click-outside
   // did not; with Spaces pinning both paths now behave the same.
   popoverWindow.on("close", (event) => {
-    if (process.env.BABY_MENU_KEEP_POPOVER_OPEN === "1") return;
+    // Blocking close during app.quit() would cancel the quit itself.
+    if (appQuitting || process.env.BABY_MENU_KEEP_POPOVER_OPEN === "1") return;
     event.preventDefault();
     popoverWindow?.hide();
   });
@@ -403,6 +404,7 @@ export async function startBabyMenuApp(): Promise<void> {
   app.on("activate", () => undefined);
   app.on("window-all-closed", () => undefined);
   app.on("before-quit", () => {
+    appQuitting = true;
     backgroundTasks.stop();
     database.close();
     // Best-effort: agent adapter children (claude/codex via ELECTRON_RUN_AS_NODE)

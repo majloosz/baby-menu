@@ -36,6 +36,7 @@ const browserWindowInstance = {
   focus: vi.fn(),
   hide: vi.fn(),
   on: vi.fn(),
+  setVisibleOnAllWorkspaces: vi.fn(),
   loadFile: vi.fn(async () => undefined),
   loadURL: vi.fn(async () => undefined),
   webContents: { send: vi.fn(), on: vi.fn(), reload: vi.fn(), isCrashed: vi.fn(() => false) },
@@ -75,7 +76,9 @@ vi.mock("../src/main/telemetry", () => ({
 }));
 
 vi.mock("../src/main/agent-runtime", () => ({
-  BabyMenuAgentRuntime: vi.fn(),
+  BabyMenuAgentRuntime: vi.fn(function MockAgentRuntime() {
+    return { close: vi.fn(async () => undefined) };
+  }),
   commandExists: vi.fn(() => false),
 }));
 
@@ -245,6 +248,7 @@ describe("startBabyMenuApp", () => {
         }),
       }),
     );
+    expect(browserWindowInstance.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true, { visibleOnFullScreen: true });
   });
 
   it("wires content-height resize reports into the popover bounds", async () => {
@@ -480,6 +484,26 @@ describe("startBabyMenuApp", () => {
 
     expect(close).toHaveBeenCalled();
   });
+
+  it("lets the popover close during quit so the first Quit is not cancelled", async () => {
+    const appModule = await import("../src/main/app");
+    await appModule.startBabyMenuApp();
+    const onTrayClick = createBabyMenuTray.mock.calls.at(-1)?.[0];
+    await onTrayClick?.({ x: 100, y: 10, width: 24, height: 24 });
+    await vi.waitFor(() => expect(browserWindowInstance.show).toHaveBeenCalled());
+    const onClose = browserWindowInstance.on.mock.calls.find(([event]) => event === "close")?.[1];
+    const onBeforeQuit = electronApp.on.mock.calls.find(([event]) => event === "before-quit")?.[1];
+
+    const hideEvent = { preventDefault: vi.fn() };
+    onClose?.(hideEvent);
+    expect(hideEvent.preventDefault).toHaveBeenCalled();
+
+    onBeforeQuit?.();
+    const quitEvent = { preventDefault: vi.fn() };
+    onClose?.(quitEvent);
+    expect(quitEvent.preventDefault).not.toHaveBeenCalled();
+  });
+
   describe("popover renderer recovery", () => {
     async function openPopoverAndGetGoneHandler() {
       const appModule = await import("../src/main/app");

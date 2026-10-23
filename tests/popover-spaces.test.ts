@@ -1,8 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   POPOVER_BLUR_GRACE_MS,
   POPOVER_BLUR_HIDE_DELAY_MS,
-  applyPopoverSpaceBehavior,
   createPopoverOptions,
   shouldSuppressPopoverBlur,
 } from "../src/main/popover";
@@ -15,20 +14,6 @@ describe("popover Spaces pinning (issue #117)", () => {
     expect(options.acceptFirstMouse).toBe(true);
     expect(options.alwaysOnTop).toBe(true);
     expect(options.show).toBe(false);
-  });
-
-  it("pins the window to all Spaces with fullscreen visibility", () => {
-    const window = {
-      setVisibleOnAllWorkspaces: vi.fn(),
-      setFullScreenable: vi.fn(),
-    };
-    applyPopoverSpaceBehavior(window);
-    expect(window.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true, { visibleOnFullScreen: true });
-    expect(window.setFullScreenable).toHaveBeenCalledWith(false);
-  });
-
-  it("tolerates windows without Spaces methods (test doubles / older Electron)", () => {
-    expect(() => applyPopoverSpaceBehavior({})).not.toThrow();
   });
 
   it("suppresses blur-hide during the grace window after show", () => {
