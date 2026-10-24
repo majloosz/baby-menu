@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en" data-theme="wireframe">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Muse Code Quota Widget Recipe</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  </head>
+  <body class="bg-base-200 text-base-content">
+    <main class="mx-auto max-w-4xl space-y-5 p-6 text-base leading-7 sm:p-10 [&_code]:text-sm [&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_li]:mb-1 [&_li]:leading-7 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-6 [&_p]:mb-2 [&_p]:leading-7 [&_pre]:my-3 [&_pre_code]:text-sm [&_section]:space-y-3 [&_table]:text-sm [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-6">
+      <h1 class="text-3xl font-bold tracking-tight">Muse Code Quota Widget Recipe</h1>
+
+      <section class="card border border-base-300 bg-base-100 p-6 shadow-sm">
+        <h2>Capability</h2>
+        <p>Show the Muse Code subscription tier, session-window usage, and weekly usage with official reset times, acquired only through the installed official CLI.</p>
+        <p>The sole quota source is <code>muse usage --json</code>, which prints one JSON envelope with tier, window, and weekly allowance fields.</p>
+        <p>Never read the <code>ai.meta.dev.credentials</code> keychain item directly. The official CLI owns that item and rewrites it on token refresh, which drops any "Always Allow" grant - so every direct keychain read re-prompts on nearly every widget refresh.</p>
+        <p>Never call the Muse key endpoint directly and never handle a Muse bearer token in the extension; the CLI owns credential storage, refresh, and selection.</p>
+        <p>This recipe is self-contained and requires no external implementation guide.</p>
+      </section>
+
+      <section class="card border border-base-300 bg-base-100 p-6 shadow-sm">
+        <h2>Recommended Data Source Order</h2>
+        <table class="table table-zebra">
+          <thead>
+            <tr><th>Priority</th><th>Source</th><th>Contract</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td>Official CLI (<code>muse usage --json</code>)</td><td>Fresh tier, session-window, and weekly usage from the credential owner.</td></tr>
+            <tr><td>2</td><td>Last-good snapshot cache</td><td>Same-extension stored snapshot for eligible transient failures only, rendered visibly stale.</td></tr>
+          </tbody>
+        </table>
+        <p>There is no file, keychain, or direct-API fallback source. A missing CLI is an explicit unavailable outcome, not a reason to reach for the credential store.</p>
+      </section>
+
+      <section class="card border border-base-300 bg-base-100 p-6 shadow-sm">
+        <h2>Official CLI Invocation</h2>
+        <p>Shell and credential-adjacent work belongs only in <code>muse-code-quota/server.ts</code>, behind <code>window.babyMenu.capabilities.invoke</code>.</p>
+        <p>Resolve the binary in this order without a shell: <code>muse</code> on <code>PATH</code>, then <code>~/.local/bin/muse</code>.</p>
+        <p>Spawn the resolved binary with argument array <code>["usage", "--json"]</code>, <code>shell: false</code>, ignored stdin, the complete inherited environment, a 15-second timeout, and a 1 MiB stdout cap held only in memory.</p>
+        <p>When every candidate is missing (<code>ENOENT</code>), return an unavailable error naming the missing CLI. Do not probe the keychain or network as a substitute.</p>
+        <p>A nonzero exit may still print a JSON envelope with <code>reason</code> and <code>hint</code> fields; parse stdout regardless of exit status before classifying the failure.</p>
+        <p>Before writing parsing code, run the real <code>muse usage --json</code> on the target machine and confirm the exact field names below. Never guess the envelope shape. Its output carries no secrets, but print only the fields this recipe names.</p>
+      </section>
+
+      <section class="card border border-base-300 bg-base-100 p-6 shadow-sm">
+        <h2>Parser Guidance</h2>
+        <p>Accept one JSON object shaped like this real envelope (values vary):</p>
+        <pre class="mockup-code overflow-auto p-4"><code>{
+  "schemaVersion": 1,
+  "allowance": {
+    "tier": "Muse Code High Usage",
+    "window": { "usedPercent": 23, "resetsAtMs": 1792877884000 },
+    "weekly": { "usedPercent": 49, "resetsAtMs": 1792972800000 },
+    "asOfMs": 1792876678649,
+    "source": "mint"
+  },
+  "reason": null,
+  "hint": null
+}</code></pre>
+        <p>Require <code>allowance</code> to be an object and at least one of <code>allowance.window</code> / <code>allowance.weekly</code> to carry a finite non-negative <code>usedPercent</code>.</p>
+        <p>Convert <code>resetsAtMs</code> to ISO 8601 only when it is a finite positive number; otherwise omit <code>resetAt</code>.</p>
+        <p>Read <code>tier</code> only when it is a non-empty string.</p>
+        <p>On a failing run, read <code>reason</code> for classification only: an auth/login/sign-in/unauthorized-shaped reason is sign-in-required, any other reason is a transient CLI failure. Never render the raw <code>reason</code> or <code>hint</code> text; map to the normalized user-visible errors below.</p>
+        <p>Timeouts, non-JSON output, and envelopes without a usable window are transient failures eligible for the stale snapshot.</p>
+      </section>
+
+      <section class="card border border-base-300 bg-base-100 p-6 shadow-sm">
+        <h2>Normalized Types</h2>
+        <pre class="mockup-code overflow-auto p-4"><code>type MuseQuotaWindow = {
+  id: "weekly" | "window";
+  label: string;
+  percentUsed: number;
+  resetAt?: string;
+  durationMins?: number;
+};
+
+type MuseQuotaSnapshot = {
+  tier?: string;
+  windows: MuseQuotaWindow[];
+  refreshedAt: string;
+  stale: boolean;
+};
+
+type QuotaResult =
+  | { ok: true; data: MuseQuotaSnapshot }
+  | { ok: false; error: string };</code></pre>
+        <p>Label the weekly window <code>week</code> and the session window <code>session</code>.</p>
+        <p><code>durationMins</code> is optional and omitted when the CLI envelope does not report it.</p>
+        <p>User-visible errors are exactly <code>Muse sign-in required</code>, <code>Muse CLI not found</code>, <code>muse usage timed out</code>, or <code>muse usage failed</code> (with a normalized reason suffix only for non-auth CLI failures).</p>
+      </section>
+
+      <section class="card border border-base-300 bg-base-100 p-6 shadow-sm">
+        <h2>Implementation Contract</h2>
+        <p>All shell, parse, and cache work belongs in <code>muse-code-quota/server.ts</code> behind <code>window.babyMenu.capabilities.invoke</code>.</p>
+        <p>Use <code>context.db</code> for one internal last-good snapshot row, keyed to a single stable table.</p>
+        <p>Only a successful CLI parse may write the snapshot. On an eligible transient failure, return the stored snapshot as stale without changing the stored bytes.</p>
+        <p>Auth and missing-CLI outcomes must not render or refresh the cache; they return their explicit error.</p>
+        <p>Single-flight the entire <code>getQuota</code> acquisition so startup, interval, and manual calls share one CLI run and one cache write.</p>
+        <p>Server action response shape is the <code>QuotaResult</code> union above.</p>
+      </section>
+
+      <section class="card border border-base-300 bg-base-100 p-6 shadow-sm">
+        <h2>Renderer and Refresh Contract</h2>
+        <p>Export a <code>RefreshableBabyMenuWidget</code> with a five-minute <code>viewRefreshIntervalMs</code> and one shared <code>refreshView</code> function.</p>
+        <p>The host-owned <code>refreshView</code> call is the startup refresh path; a visible manual refresh control must call the same function, disable itself while pending, and never create overlapping work.</p>
+        <p>While refresh is pending, keep the currently rendered successful windows and show an updating indicator.</p>
+        <p>Render stale snapshots with an explicit stale marker, never as fresh data.</p>
+        <p>Show sign-in guidance (<code>muse login</code>) only for the <code>Muse sign-in required</code> outcome, and distinct copy for missing-CLI, timeout, and transient failures.</p>
+        <p>Normalized data arrives over <code>window.babyMenu</code>; do not add new preload methods for this widget.</p>
+        <p>Round only rendered percentages, never stored values.</p>
+      </section>
+
+      <section class="card border border-base-300 bg-base-100 p-6 shadow-sm">
+        <h2>Error Classification</h2>
+        <ul>
+          <li>All binary candidates missing is unavailable (<code>Muse CLI not found</code>).</li>
+          <li>A killed or timed-out CLI run is transient (<code>muse usage timed out</code>).</li>
+          <li>Non-JSON output or an envelope without a usable window is transient (<code>muse usage failed</code>).</li>
+          <li>An auth-shaped CLI <code>reason</code> is sign-in-required (<code>Muse sign-in required</code>).</li>
+          <li>Any other CLI <code>reason</code> is transient with a normalized suffix.</li>
+        </ul>
+        <p>Diagnostics are allowlisted timeout, exit, and missing-field metadata only. Raw CLI output never leaves the server action.</p>
+      </section>
+
+      <section class="card border border-base-300 bg-base-100 p-6 shadow-sm">
+        <h2>Security Constraints</h2>
+        <ul>
+          <li>Acquire quota only through the official CLI and let that client own all credential storage and refresh.</li>
+          <li>Never read the <code>ai.meta.dev.credentials</code> keychain item, never run a keychain lookup utility, and never call the Muse key endpoint directly.</li>
+          <li>Never handle, log, return, cache, or commit bearer tokens, credential bundles, or raw keychain payloads.</li>
+          <li>Never pass a credential through process arguments or newly created environment variables.</li>
+          <li>Never expose raw CLI output, exit internals, or provider payloads to the renderer or diagnostics.</li>
+        </ul>
+      </section>
+
+      <section class="card border border-base-300 bg-base-100 p-6 shadow-sm">
+        <h2>Interactive Demo</h2>
+        <div class="space-y-4">
+          <div class="stats stats-vertical w-full border border-base-300 bg-base-100 md:stats-horizontal">
+            <div class="stat"><div class="stat-title">Weekly</div><div class="stat-value text-2xl">49% used</div><div class="stat-desc">51% remaining</div></div>
+            <div class="stat"><div class="stat-title">Session</div><div class="stat-value text-2xl">23% used</div><div class="stat-desc">Official CLI source</div></div>
+            <div class="stat"><div class="stat-title">Source</div><div class="stat-value text-2xl">live</div><div class="stat-desc">muse usage --json</div></div>
+          </div>
+          <progress class="progress w-full" value="49" max="100"></progress>
+          <div class="alert alert-warning" role="status"><span>Example stale state: showing the cached snapshot while the CLI run times out.</span></div>
+          <p class="text-sm">These are labeled sample values only.</p>
+        </div>
+      </section>
+
+      <section class="card border border-base-300 bg-base-100 p-6 shadow-sm">
+        <h2>Acceptance Criteria</h2>
+        <ul>
+          <li>The server spawns only the resolved <code>muse</code> binary with <code>["usage", "--json"]</code>, no shell, a bounded timeout, and no keychain or direct-API path.</li>
+          <li>A healthy CLI run never touches the macOS keychain from the extension, so no system prompt appears on refresh.</li>
+          <li>Missing CLI, timeout, malformed output, auth-shaped, and other CLI failures map deterministically to the documented normalized errors.</li>
+          <li>Only successful parses write the snapshot, and only transient failures render it stale.</li>
+          <li>Concurrent <code>getQuota</code> calls share one CLI run and one cache write.</li>
+          <li>The finished server action is verified against the real <code>muse usage --json</code> output before reporting done; reasoning about the envelope on paper is not verification.</li>
+          <li>No bearer token, credential bundle, keychain payload, raw CLI output, or provider body appears in logs, renderer data, fixtures, or evidence.</li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

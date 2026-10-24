@@ -17,6 +17,7 @@ describe("loadRecipes", () => {
       "copilot-quota",
       "cursor-quota",
       "grok-quota",
+      "muse-code-quota",
     ]);
     expect(recipes.every((recipe) => recipe.title.length > 0)).toBe(true);
   });
@@ -28,6 +29,7 @@ describe("loadRecipes", () => {
       new URL("../extensions/recipes/copilot-quota.html", import.meta.url),
       new URL("../extensions/recipes/cursor-quota.html", import.meta.url),
       new URL("../extensions/recipes/grok-quota.html", import.meta.url),
+      new URL("../extensions/recipes/muse-code-quota.html", import.meta.url),
     ];
 
     for (const recipeUrl of recipeUrls) {
@@ -78,6 +80,17 @@ describe("loadRecipes", () => {
     expect(html).toContain("Do not classify these local source outcomes as <code>parse_incompatible</code> or sign-in-required");
     expect(html).not.toContain("missing file, empty object, or no candidate with a non-empty <code>key</code>");
     expect(html).not.toContain("return <code>Grok sign-in required</code> with <code>sourceTried: [\"local-auth\"]</code>");
+  });
+
+  it("keeps Muse quota acquisition inside the official CLI, never the keychain", async () => {
+    const html = await readFile(new URL("../extensions/recipes/muse-code-quota.html", import.meta.url), "utf8");
+
+    expect(html).toContain("<code>muse usage --json</code>");
+    expect(html).toContain("Never read the <code>ai.meta.dev.credentials</code> keychain item");
+    expect(html).toContain("Never call the Muse key endpoint directly");
+    expect(html).toContain("Always Allow");
+    expect(html).not.toContain("find-generic-password");
+    expect(html).not.toContain("api.meta.ai/muse-code/key");
   });
 
   it("keeps Cursor sqlite auth reads scoped to used keys", async () => {
