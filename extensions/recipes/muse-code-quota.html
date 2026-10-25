@@ -82,11 +82,14 @@ type MuseQuotaSnapshot = {
   windows: MuseQuotaWindow[];
   refreshedAt: string;
   stale: boolean;
+  lastError?: string;
+  lastErrorAt?: string;
 };
 
 type QuotaResult =
   | { ok: true; data: MuseQuotaSnapshot }
   | { ok: false; error: string };</code></pre>
+        <p><code>lastError</code> carries the normalized failure message only on stale snapshots, with <code>lastErrorAt</code> marking when that refresh failed; fresh snapshots omit both.</p>
         <p>Label the weekly window <code>week</code> and the session window <code>session</code>.</p>
         <p><code>durationMins</code> is optional and omitted when the CLI envelope does not report it.</p>
         <p>User-visible errors are exactly <code>Muse sign-in required</code>, <code>Muse CLI not found</code>, <code>muse usage timed out</code>, or <code>muse usage failed</code> (with a normalized reason suffix only for non-auth CLI failures).</p>
@@ -99,6 +102,8 @@ type QuotaResult =
         <p>Only a successful CLI parse may write the snapshot. On an eligible transient failure, return the stored snapshot as stale without changing the stored bytes.</p>
         <p>Auth and missing-CLI outcomes must not render or refresh the cache; they return their explicit error.</p>
         <p>Single-flight the entire <code>getQuota</code> acquisition so startup, interval, and manual calls share one CLI run and one cache write.</p>
+        <p>Reuse the stored snapshot without spawning the CLI again while it is younger than 45 seconds, so repeat menu opens in a burst share one read.</p>
+        <p>On an eligible transient failure, attach the normalized failure message as <code>lastError</code> with the current time as <code>lastErrorAt</code>: the CLI <code>reason</code> suffix when present, else the trimmed first stderr line bounded to one short line, else the exit metadata. Never attach stdout payload.</p>
         <p>Server action response shape is the <code>QuotaResult</code> union above.</p>
       </section>
 
@@ -108,6 +113,8 @@ type QuotaResult =
         <p>The host-owned <code>refreshView</code> call is the startup refresh path; a visible manual refresh control must call the same function, disable itself while pending, and never create overlapping work.</p>
         <p>While refresh is pending, keep the currently rendered successful windows and show an updating indicator.</p>
         <p>Render stale snapshots with an explicit stale marker, never as fresh data.</p>
+        <p>Render the stale <code>lastError</code> text next to the stale marker so a bare STALE never hides its cause.</p>
+        <p>Guard the fetch with a client-side timeout longer than the server timeout, and a failed fetch keeps the last good snapshot instead of blanking the widget; only a first-ever failure renders the unavailable state.</p>
         <p>Show sign-in guidance (<code>muse login</code>) only for the <code>Muse sign-in required</code> outcome, and distinct copy for missing-CLI, timeout, and transient failures.</p>
         <p>Normalized data arrives over <code>window.babyMenu</code>; do not add new preload methods for this widget.</p>
         <p>Round only rendered percentages, never stored values.</p>
@@ -122,7 +129,7 @@ type QuotaResult =
           <li>An auth-shaped CLI <code>reason</code> is sign-in-required (<code>Muse sign-in required</code>).</li>
           <li>Any other CLI <code>reason</code> is transient with a normalized suffix.</li>
         </ul>
-        <p>Diagnostics are allowlisted timeout, exit, and missing-field metadata only. Raw CLI output never leaves the server action.</p>
+        <p>Diagnostics are allowlisted timeout, exit, missing-field, and one trimmed stderr line metadata only. Raw CLI output never leaves the server action.</p>
       </section>
 
       <section class="card border border-base-300 bg-base-100 p-6 shadow-sm">

@@ -89,6 +89,10 @@ describe("loadRecipes", () => {
     expect(html).toContain("Never read the <code>ai.meta.dev.credentials</code> keychain item");
     expect(html).toContain("Never call the Muse key endpoint directly");
     expect(html).toContain("Always Allow");
+    expect(html).toContain("without spawning the CLI again while it is younger than 45 seconds");
+    expect(html).toContain("attach the normalized failure message as <code>lastError</code>");
+    expect(html).toContain("Render the stale <code>lastError</code> text next to the stale marker");
+    expect(html).toContain("a failed fetch keeps the last good snapshot instead of blanking the widget");
     expect(html).not.toContain("find-generic-password");
     expect(html).not.toContain("api.meta.ai/muse-code/key");
   });
