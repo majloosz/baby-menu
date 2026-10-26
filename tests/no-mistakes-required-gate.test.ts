@@ -67,7 +67,7 @@ describe("no-mistakes-required workflow contract", () => {
 
     const check = config.jobs.check;
     expect(check.name).toBe("PR must be raised via no-mistakes");
-    expect(check["runs-on"]).toEqual(["self-hosted", "freearm"]);
+    expect(check["runs-on"]).toBe("ubuntu-latest");
     expect(check.if).toBe(
       "github.event.pull_request.user.login != 'github-actions[bot]' && github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.user.login != 'release-please[bot]'",
     );

@@ -23,7 +23,7 @@ permissions:
 jobs:
   release-please:
     if: ${{ github.event_name == 'push' }}
-    runs-on: [self-hosted, freearm]
+    runs-on: ubuntu-latest
     outputs:
       baby-menu-release-created: ${{ steps.release.outputs.release_created }}
       baby-menu-tag-name: ${{ steps.release.outputs.tag_name }}

@@ -40,7 +40,7 @@ concurrency:
 jobs:
   check:
     name: PR must be raised via no-mistakes
-    runs-on: [self-hosted, freearm]
+    runs-on: ubuntu-latest
     # Known automation accounts are exempt so release and dependency automation keeps working.
     if: >-
       github.event.pull_request.user.login != 'github-actions[bot]' &&
