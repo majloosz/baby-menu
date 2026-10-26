@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.1.25](https://github.com/majloosz/baby-menu/compare/baby-menu-v0.1.24...baby-menu-v0.1.25) (2026-10-26)
+
+
+### Features
+
+* **popover:** raise max height 720 -&gt; 1000 so full menu fits without scroll ([2cfef1f](https://github.com/majloosz/baby-menu/commit/2cfef1f42811697dfc0063423d6f57362eb27d8c))
+* **recipes:** add muse-code-quota recipe with CLI-only acquisition ([6b0a7f1](https://github.com/majloosz/baby-menu/commit/6b0a7f11d5232a19d054a04644781935715cdc9a))
+
+
+### Bug Fixes
+
+* **database:** make close idempotent so double quit cannot crash shutdown ([6d03ac0](https://github.com/majloosz/baby-menu/commit/6d03ac084da33d8aa634344cb2cd729a00cc925d))
+* **popover:** do not cancel quit, pin popover to all Spaces inline ([1305ba6](https://github.com/majloosz/baby-menu/commit/1305ba6348e84f2ff15db71ee37bfd725e0fce1c))
+* **popover:** keep menu on current Space, stop instant self-close ([eda3d6c](https://github.com/majloosz/baby-menu/commit/eda3d6c995e1fbc50507de5b0cc1a1d597213dae))
+* **popover:** recover the popover when its renderer process dies ([#118](https://github.com/majloosz/baby-menu/issues/118)) ([e7804b1](https://github.com/majloosz/baby-menu/commit/e7804b165af25e407a6635c30358a2e41cfe72cd))
+* **recipes:** harden muse-code-quota against silent STALE ([3238cac](https://github.com/majloosz/baby-menu/commit/3238cac130cfd02bfe15dcb90fbd125bca9bb7b0))
+
+
+### Performance Improvements
+
+* cut idle CPU/RAM - gate discovery polling, single-instance, no GPU process ([1b64b7e](https://github.com/majloosz/baby-menu/commit/1b64b7e4d9f5d840485044b4821ec5edf1bd4f95))
+
 ## [0.1.24](https://github.com/kunchenguid/baby-menu/compare/baby-menu-v0.1.23...baby-menu-v0.1.24) (2026-07-25)
 
 
